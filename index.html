@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แปลงเศษส่วนเป็นทศนิยม</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600&display=swap" rel="stylesheet');
+        :root {
+            --primary-color: #4a90e2; --secondary-color: #50e3c2; --bg-color: #f0f8ff;
+            --correct-color: #28a745; --incorrect-color: #dc3545; --font-color: #333;
+        }
+        body {
+            font-family: 'Chakra Petch', sans-serif;
+            font-size: 1.2rem;
+            color: #333;
+            background-image: url('https://lh5.googleusercontent.com/d/1l2TR-m_FEQkDAva-HWbkKhR9zzL3pV7M');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .game-container {
+            width: 95%; max-width: 800px; background: white; border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); padding: 20px; text-align: center;
+            overflow: hidden; position: relative;
+        }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        #selector-screen h2 { color: var(--primary-color); }
+        #panel-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px auto; max-width: 600px;
+        }
+        .panel { aspect-ratio: 1 / 1; perspective: 1000px; cursor: pointer; }
+        .panel-inner {
+            position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d;
+        }
+        .panel.flipped .panel-inner { transform: rotateY(180deg); }
+        .panel-front, .panel-back {
+            position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 15px;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .panel-front {
+            background-color: var(--secondary-color); font-size: 3rem; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .panel-back {
+            background-color: white; transform: rotateY(180deg); padding: 5px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .panel-back img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+        #hud {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-size: 1.5rem;
+        }
+        #hearts-container { font-size: 2rem; color: var(--incorrect-color); }
+        #score-container { font-weight: bold; color: var(--primary-color); }
+        #question-container {
+            margin: 30px 0; font-weight: bold; display: flex; justify-content: center; align-items: center;
+            flex-wrap: wrap; gap: 15px; min-height: 100px;
+        }
+        
+        /* * จุดที่แก้ไขหลัก:
+         * ขนาดของโจทย์ทั้งหมดจะถูกควบคุมโดย #question-text ที่เดียว
+         * เพื่อให้เลขข้างหน้าและเศษส่วนมีขนาดเท่ากันเสมอ
+        */
+        #question-text { 
+            font-size: 2.5rem; /* <-- ปรับขนาดโจทย์ทั้งหมดได้ที่นี่ */
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+
+        .fraction-display { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }
+        .whole-number { 
+            /* ไม่มี font-size ที่นี่ เพื่อให้ขนาดเท่ากับส่วนอื่น */
+        }
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            /* ไม่มี font-size ที่นี่ เพื่อให้ขนาดเท่ากับส่วนอื่น */
+        }
+        .numerator, .denominator { padding: 0 10px; }
+        .vinculum { height: 2.5px; width: 100%; background-color: var(--font-color); border-radius: 2px; margin: 2px 0; }
+        #answer-input {
+            font-family: 'Kanit', sans-serif; font-size: 2.5rem; padding: 10px; width: 200px; max-width: 50%;
+            text-align: center; border: 2px solid #ccc; border-radius: 10px;
+        }
+        #game-over-screen h2 { font-size: 3rem; }
+        #final-score { font-size: 2rem; margin: 20px 0; }
+        .feedback {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9);
+            display: flex; justify-content: center; align-items: center; font-size: 5rem;
+            font-weight: bold; z-index: 100;
+        }
+        .feedback.correct { color: var(--correct-color); }
+        .feedback.incorrect { color: var(--incorrect-color); }
+        .btn {
+            font-family: 'Kanit', sans-serif; background-color: var(--primary-color); color: white; border: none;
+            padding: 15px 30px; border-radius: 10px; font-size: 1.2rem; cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s; margin-top: 20px;
+        }
+        .btn:hover { background-color: #3a7ac8; transform: scale(1.05); }
+        .btn-shuffle { background-color: #f39c12; }
+        .btn-shuffle:hover { background-color: #e67e22; }
+        
+        /* แก้ไขสำหรับหน้าจอมือถือให้ถูกต้อง */
+        @media (max-width: 768px) {
+            #panel-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            #question-text { font-size: 1.8rem; } /* ปรับขนาดสำหรับมือถือ ขนาดอื่นจะย่อตาม */
+            #answer-input { font-size: 1.8rem; padding: 8px; }
+            .btn { padding: 12px 24px; font-size: 1rem; }
+            #hud { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        
+        <div id="start-screen" class="screen active">
+            <h1>เกมแปลงเศษส่วนเป็นทศนิยม</h1>
+            <p>คลิก "เริ่มเกม" เพื่อสุ่มเลือกผู้ตอบคนแรก</p>
+            <button id="start-btn" class="btn">เริ่มเกม</button>
+        </div>
+
+        <div id="selector-screen" class="screen">
+            <h2>ถึงตาใครตอบ?</h2>
+            <p>ให้นักเรียนคลิกเลือกแผ่นป้าย 1 แผ่น</p>
+            <div id="panel-grid"></div>
+            <button id="shuffle-btn" class="btn btn-shuffle">สลับตำแหน่งใหม่</button>
+        </div>
+
+        <div id="game-screen" class="screen">
+            <div id="hud">
+                <div id="score-container">คะแนน: 0</div>
+                <div id="hearts-container"></div>
+            </div>
+            <div id="question-container">
+                <div id="question-text"></div>
+                 = 
+                <input type="number" id="answer-input" placeholder="คำตอบ" step="any">
+            </div>
+            <button id="submit-btn" class="btn">ส่งคำตอบ</button>
+        </div>
+
+        <div id="game-over-screen" class="screen">
+            <h2>เกมจบแล้ว!</h2>
+            <div id="final-score">คะแนนสุดท้ายของคุณคือ: 0</div>
+            <button id="restart-btn" class="btn">เล่นอีกครั้ง</button>
+        </div>
+
+    </div>
+
+    <audio id="correct-sound" src="https://www.myinstants.com/media/sounds/aimkhanaamuue-phiiely.mp3" preload="auto"></audio>
+    <audio id="wrong-sound" src="https://www.myinstants.com/media/sounds/naom-naakh-m.mp3" preload="auto"></audio>
+    
+    <script>
+        const studentImageUrls = [
+            'https://lh5.googleusercontent.com/d/1iLfTPUO9DLC9v_JIsCacZkrGGcYeBoIH', 'https://lh5.googleusercontent.com/d/1JflR0rpVAKhA0-3Sa-ltJwD80uxzHflk',
+            'https://lh5.googleusercontent.com/d/1OWqpmixUcE_vF5XQCGH2cPqmteFfR-lp', 'https://lh5.googleusercontent.com/d/1GP8_mIOHWIiEjTVuz6ynY-632vJbhOBd',
+            'https://lh5.googleusercontent.com/d/1M6iBq7FUtX3vYoEcCNfwKAIKUSsV6Ia2', 'https://lh5.googleusercontent.com/d/1Ek006DDn_JB42uKgpHSjiR6Q9s3Z0q8L',
+            'https://lh5.googleusercontent.com/d/1n9ELDLdNvHLBm9G3M8qid4G0xuysIIeI', 'https://lh5.googleusercontent.com/d/1gQoScOets7r5f9ofMKtNbEveoIecBkBy'
+        ];
+        
+        const questions = [
+            { numerator: 7, denominator: 8, answer: 0.875 }, { numerator: 27, denominator: 30, answer: 0.9 },
+            { numerator: 21, denominator: 56, answer: 0.375 }, { numerator: 45, denominator: 72, answer: 0.625 },
+            { numerator: 39, denominator: 195, answer: 0.2 }, { numerator: 40, denominator: 320, answer: 0.125 },
+            { numerator: 438, denominator: 500, answer: 0.876 }, { whole: 5, numerator: 9, denominator: 25, answer: 5.36 },
+            { whole: 12, numerator: 27, denominator: 45, answer: 12.6 }, { whole: 36, numerator: 13, denominator: 65, answer: 36.2 },
+            { whole: 63, numerator: 54, denominator: 90, answer: 63.6 }, { whole: 85, numerator: 29, denominator: 40, answer: 85.725 },
+            { whole: 91, numerator: 57, denominator: 152, answer: 91.375 }, { whole: 99, numerator: 68, denominator: 85, answer: 99.8 },
+            { whole: 132, numerator: 28, denominator: 175, answer: 132.16 }, { whole: 171, numerator: 184, denominator: 460, answer: 171.4 }
+        ];
+
+        let currentQuestionIndex = 0, score = 0, lives = 3;
+        let shuffledQuestions = [];
+
+        const screens = document.querySelectorAll('.screen');
+        const startBtn = document.getElementById('start-btn');
+        const panelGrid = document.getElementById('panel-grid');
+        const shuffleBtn = document.getElementById('shuffle-btn');
+        const questionText = document.getElementById('question-text');
+        const answerInput = document.getElementById('answer-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const scoreContainer = document.getElementById('score-container');
+        const heartsContainer = document.getElementById('hearts-container');
+        const finalScore = document.getElementById('final-score');
+        const restartBtn = document.getElementById('restart-btn');
+        const gameContainer = document.querySelector('.game-container');
+        const correctSound = document.getElementById('correct-sound');
+        const wrongSound = document.getElementById('wrong-sound');
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function switchScreen(screenId) {
+            screens.forEach(screen => screen.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function startGame() {
+            currentQuestionIndex = 0; score = 0; lives = 3;
+            shuffledQuestions = [...questions];
+            shuffleArray(shuffledQuestions);
+            updateHUD();
+            showSelector();
+        }
+
+        function showSelector() {
+            switchScreen('selector-screen');
+            panelGrid.innerHTML = '';
+            let images = [...studentImageUrls];
+            while (images.length < 8) { images.push(...studentImageUrls); }
+            images = images.slice(0, 8);
+            shuffleArray(images);
+            images.forEach(imageUrl => {
+                const panel = document.createElement('div');
+                panel.classList.add('panel');
+                panel.innerHTML = `<div class="panel-inner"><div class="panel-front">?</div><div class="panel-back"><img src="${imageUrl}" alt="Student Picture"></div></div>`;
+                panel.addEventListener('click', () => handlePanelClick(panel), { once: true });
+                panelGrid.appendChild(panel);
+            });
+        }
+
+        function handlePanelClick(clickedPanel) {
+            document.querySelectorAll('.panel').forEach(p => p.style.pointerEvents = 'none');
+            clickedPanel.classList.add('flipped');
+            setTimeout(() => showQuestion(), 2000);
+        }
+
+        function showQuestion() {
+            switchScreen('game-screen');
+            const question = shuffledQuestions[currentQuestionIndex];
+            let fractionHTML = '<div class="fraction-display">';
+            if (question.whole) { fractionHTML += `<div class="whole-number">${question.whole}</div>`; }
+            fractionHTML += `<div class="fraction"><span class="numerator">${question.numerator}</span><span class="vinculum"></span><span class="denominator">${question.denominator}</span></div>`;
+            fractionHTML += '</div>';
+            questionText.innerHTML = `${currentQuestionIndex + 1}. ${fractionHTML}`;
+            answerInput.value = '';
+            answerInput.focus();
+        }
+
+        function updateHUD() {
+            scoreContainer.textContent = `คะแนน: ${score}`;
+            heartsContainer.innerHTML = Array(3).fill(0).map((_, i) => (i < lives) ? '❤️' : '💔').join('');
+        }
+
+        function checkAnswer() {
+            const userAnswer = parseFloat(answerInput.value);
+            const correctAnswer = shuffledQuestions[currentQuestionIndex].answer;
+            const isCorrect = Math.abs(userAnswer - correctAnswer) < 0.0001;
+
+            if (isCorrect) {
+                correctSound.play();
+                score++;
+                showFeedback(true);
+            } else {
+                wrongSound.play();
+                lives--;
+                score = Math.max(0, score - 1);
+                showFeedback(false);
+            }
+            updateHUD();
+            
+            setTimeout(() => {
+                currentQuestionIndex++;
+                if (lives === 0 || currentQuestionIndex >= shuffledQuestions.length) {
+                    endGame();
+                } else {
+                    showSelector();
+                }
+            }, 1800);
+        }
+        
+        function showFeedback(isCorrect) {
+            const feedbackEl = document.createElement('div');
+            feedbackEl.classList.add('feedback');
+            if (isCorrect) {
+                feedbackEl.textContent = 'ถูกต้อง!';
+                feedbackEl.classList.add('correct');
+            } else {
+                const correctAnswer = shuffledQuestions[currentQuestionIndex].answer;
+                feedbackEl.innerHTML = `ผิด!<br><small style="font-size: 2rem;">คำตอบคือ ${correctAnswer}</small>`;
+                feedbackEl.classList.add('incorrect');
+            }
+            gameContainer.appendChild(feedbackEl);
+            setTimeout(() => feedbackEl.remove(), 1800);
+        }
+
+        function endGame() {
+            switchScreen('game-over-screen');
+            finalScore.textContent = `คะแนนสุดท้ายของคุณคือ: ${score}`;
+        }
+
+        startBtn.addEventListener('click', startGame);
+        shuffleBtn.addEventListener('click', showSelector);
+        submitBtn.addEventListener('click', checkAnswer);
+        answerInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') checkAnswer(); });
+        restartBtn.addEventListener('click', () => switchScreen('start-screen'));
+
+    </script>
+</body>
+</html>
